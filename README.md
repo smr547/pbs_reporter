@@ -26,4 +26,4 @@ optional arguments:
 find /g/data/v10/tmp/pq-stack -name *.o* | xargs python ./job_reporter.py --keys 'job_id,ncpus_requested,ncpus_used,cpu_used,walltime_used,cpu_utilisation,exit_status,cpu_used_secs' > example.csv
 ``` 
 
-see [sample.csv](./sample.csv)
+see [example.csv](./example.csv)
