@@ -3,26 +3,19 @@
 Collect results from a collection of PBS-job stdout files and outputs a CSV file of results.
 
   usage: ./pbs_reporter.py job_stdout_file [...]
-  help:  ./pbs_reporter.py --help 
+  help:  ./pbs_reporter.py --help
 """
 
 import os
 import sys
 import re
-import glob
 import argparse
-from datetime import datetime
-from pathlib import Path
 
 def convert_to_iso8601(timestamp):
     """
     Ensure timestamps have a consistent, well known format
     """
-    try:
-        result = re.sub('\s', 'T', self.timestamp)  # convert to ISO8601
-    except:
-        result = None
-    return result
+    return re.sub(r'\s', 'T', timestamp)  # convert to ISO8601
 
 def pbs_time_to_seconds(pbs_duration):
     """
@@ -32,71 +25,85 @@ def pbs_time_to_seconds(pbs_duration):
     return int(fields[0])*60*60 + int(fields[1])*60 + int(fields[2])
 
 class PbsReportParser(object):
-    """ 
+    """
     Parses a PBS stdout file. Extracted values become instance properties
     """
-    _PATTERN =  (   # pattern used by parser to match PBS standard output
-        "(?i)"
-        "^\s+Resource Usage on (?P<timestamp>\d{4}-\d\d-\d\d"
-        " \d\d:\d\d:\d\d)(\.\d+)?:$"
-        "\s+Job\s*Id:\s*(?P<job_id>\S+)\s*$"
-        "\s+Project:\s*(?P<project>\S+)\s*$"
-        "\s+Exit Status:\s*(?P<exit_status>\d+)(\s+\(Linux Signal (?P<signal>\d+)\))?$"
-        "\s+Service Units:\s*(?P<service_units>\S+)$"
-        "\s+NCPUs Requested:\s*(?P<ncpus_requested>\d+)"
-        "\s+NCPUs Used:\s*(?P<ncpus_used>\d+)\s*$"
-        "\s+CPU Time Used:\s*(?P<cpu_used>\d+:\d\d:\d\d)\s*$"
-        "\s+Memory Requested:\s*(?P<memory_requested>\S+)"
-        "\s+Memory Used:\s*(?P<memory_used>\S+)\s*$"
-        "(\s+Vmem Used:\s*(?P<vmem_used>\S+)$)?"
-        "\s+Walltime requested:\s*(?P<walltime_requested>\d+:\d\d:\d\d)"
-        "\s+Walltime Used:\s*(?P<walltime_used>\d+:\d\d:\d\d)\s*$"
-        "\s+JobFS request(ed)?:\s+(?P<jobfs_requested>\S+)"
-        "\s+JobFS used:\s*(?P<jobfs_used>\S+)\s*$" )
-     
-    pbs_pattern = re.compile(_PATTERN, re.MULTILINE)
+    _PATTERN = (   # pattern used by parser to match PBS standard output
+        r"(?i)"
+        r"^\s+Resource Usage on (?P<timestamp>\d{4}-\d\d-\d\d"
+        r" \d\d:\d\d:\d\d)(\.\d+)?:$"
+        r"\s+Job\s*Id:\s*(?P<job_id>\S+)\s*$"
+        r"\s+Project:\s*(?P<project>\S+)\s*$"
+        r"\s+Exit Status:\s*(?P<exit_status>\d+)(\s+\(Linux Signal (?P<signal>\d+)\))?$"
+        r"\s+Service Units:\s*(?P<service_units>\S+)$"
+        r"\s+NCPUs Requested:\s*(?P<ncpus_requested>\d+)"
+        r"\s+NCPUs Used:\s*(?P<ncpus_used>\d+)\s*$"
+        r"\s+CPU Time Used:\s*(?P<cpu_used>\d+:\d\d:\d\d)\s*$"
+        r"\s+Memory Requested:\s*(?P<memory_requested>\S+)"
+        r"\s+Memory Used:\s*(?P<memory_used>\S+)\s*$"
+        r"(\s+Vmem Used:\s*(?P<vmem_used>\S+)$)?"
+        r"\s+Walltime requested:\s*(?P<walltime_requested>\d+:\d\d:\d\d)"
+        r"\s+Walltime Used:\s*(?P<walltime_used>\d+:\d\d:\d\d)\s*$"
+        r"\s+JobFS request(ed)?:\s+(?P<jobfs_requested>\S+)"
+        r"\s+JobFS used:\s*(?P<jobfs_used>\S+)\s*$"
+        )
+
+    pbs_pattern = re.compile(_PATTERN, re.MULTILINE) #pylint: disable=no-member
 
     @staticmethod
     def fields_available():
         """
         Return fields available from this Parser
         """
-        pat = re.compile("<(?P<name>\S+?)>")
-        m = pat.findall(PbsReportParser._PATTERN)
-        if m is not None:
-            return ",".join(m)+",path"+",stdout_size"+",cpu_utilisation"+",walltime_requested_secs"+",walltime_used_secs"
+        pat = re.compile(r"<(?P<name>\S+?)>")
+        found = pat.findall(PbsReportParser._PATTERN)
+        if found is not None:
+            return ",".join(found)+",path"+",stdout_size"+",cpu_utilisation" \
+                +", walltime_requested_secs"+",walltime_used_secs"
         return ""
 
     def __init__(self, o_file_path):
         self.path = o_file_path
         self._parsefile(o_file_path, self.pbs_pattern)
-        self.stdout_size = os.path.getsize(o_file_path)
+        self._add_derived_properties()
+
+    def _add_derived_properties(self):
+
+        self.stdout_size = os.path.getsize(self.path)
+        self.timestamp = convert_to_iso8601(self.timestamp)
+        #pylint: disable=no-member
         self.walltime_requested_secs = pbs_time_to_seconds(self.walltime_requested)
         self.walltime_used_secs = pbs_time_to_seconds(self.walltime_used)
         self.cpu_used_secs = pbs_time_to_seconds(self.cpu_used)
-        self.cpu_utilisation = round(pbs_time_to_seconds(self.cpu_used) * 100 
+        self.cpu_utilisation = round(pbs_time_to_seconds(self.cpu_used) * 100 \
             / (int(self.ncpus_used) * pbs_time_to_seconds(self.walltime_used)), 2)
 
     def _parsefile(self, o_file_path, pattern):
+        """
+        parse the content for the supplied file with the supplied pattern
+        the named groups in the pattern become attributes of self
+        """
+
         with open(o_file_path, 'r') as infile:
             content = infile.read()
 
-        m = pattern.search(content)
-        if m is None:
+        match = pattern.search(content)
+        if match is None:
             raise ValueError("could not parse %s" % (o_file_path))
         else:
-            self.__dict__.update(m.groupdict())
-            self.timestamp = convert_to_iso8601(self.timestamp)
+            self.__dict__.update(match.groupdict())
 
     def get_values(self, keys, none_value='?'):
         """
         return a list of values for the supplied list of keys
         """
-        d = self.__dict__
-        return [str(d[k]) if k in d else none_value for k in keys]
+        dickt = self.__dict__
+        return [str(dickt[k]) if k in dickt else none_value for k in keys]
 
 def main():
-    
+    """
+    mainline
+    """
     # parser the arguments
 
     default_keys = PbsReportParser.fields_available()
@@ -121,8 +128,8 @@ def main():
     for path in args.paths:
         try:
             print(','.join(PbsReportParser(path).get_values(keys)))
-        except ValueError as e:
-            sys.stderr.write(str(e)+"\n")
+        except ValueError as value_error:
+            sys.stderr.write(str(value_error)+"\n")
 
 if __name__ == "__main__":
     main()
