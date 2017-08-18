@@ -31,23 +31,6 @@ def pbs_time_to_seconds(pbs_duration):
     fields = pbs_duration.split(':')
     return int(fields[0])*60*60 + int(fields[1])*60 + int(fields[2])
 
-## class StderrParser(object):
-##     """
-##     Sniffs into stderr file looking for errors
-##     """
-##     pat = re.compile("ERROR")
-##     def __init__(self, path):
-##         self.errors = 0
-##         self.stderr_lines = 0
-##         with open(path, 'r') as infile:
-##             for line in infile:
-##                 self.stderr_lines += 1
-##                 if self.pat.search(line) is not None:
-##                     self.errors += 1
-##         self.e_file_path = path
-##         self.stderr_size = os.path.getsize(path)
-        
-
 class PbsReportParser(object):
     """ 
     Parses a PBS stdout file. Extracted values become instance properties
@@ -111,22 +94,6 @@ class PbsReportParser(object):
         """
         d = self.__dict__
         return [str(d[k]) if k in d else none_value for k in keys]
-## 
-## class YourStdoutParser(PbsReportParser):
-##     """ 
-##     Extracts information reported by your program on stdout
-##     """
-## 
-##     stacker_pattern = re.compile((
-##         "^(?P<successful>\d+) successful,\s+(?P<failed>\d+) failed$"
-##         ), re.MULTILINE)
-## 
-##     def __init__(self, o_file_path):
-##         super(StackerStdoutParser, self).__init__(o_file_path) 
-##         self._parsefile(o_file_path, self.stacker_pattern)
-##         self.finished = datetime.utcfromtimestamp(os.path.getmtime(o_file_path)).isoformat()
-##         self.job_no = Path(o_file_path).stem
-##         self.o_file_path = o_file_path
 
 def main():
     
